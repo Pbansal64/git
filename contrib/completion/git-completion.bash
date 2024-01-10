@@ -1472,6 +1472,16 @@ _git_bisect ()
 			;;
 		esac
 		;;
+	visualize)
+		case "$cur" in
+		-*)
+			__git_complete_log_opts
+			return
+			;;
+		*)
+			;;
+		esac
+		;;
 	esac
 
 	case "$subcommand" in
@@ -2074,10 +2084,14 @@ __git_diff_merges_opts="off none on first-parent 1 separate m combined c dense-c
 __git_log_pretty_formats="oneline short medium full fuller reference email raw format: tformat: mboxrd"
 __git_log_date_formats="relative iso8601 iso8601-strict rfc2822 short local default human raw unix auto: format:"
 
-_git_log ()
+
+# Check for only porcelain (i.e. not git-rev-list) option (not argument)
+# and selected option argument completions for git-log options and if any
+# are found put them in COMPREPLY.  COMPREPLY must be empty at the start,
+# and will be empty on return if no candidates are found.
+__git_complete_log_opts ()
 {
-	__git_has_doubledash && return
-	__git_find_repo_path
+	[ -z "$COMPREPLY" ] || return 1   # Precondition
 
 	local merge=""
 	if [ -f "$__git_repo_path/MERGE_HEAD" ]; then
@@ -2171,6 +2185,16 @@ _git_log ()
 		return
 		;;
 	esac
+}
+
+_git_log ()
+{
+	__git_has_doubledash && return
+	__git_find_repo_path
+
+        __git_complete_log_opts
+        [ -z "$COMPREPLY" ] || return
+
 	__git_complete_revlist
 }
 
