@@ -1449,7 +1449,7 @@ _git_bisect ()
 {
 	__git_has_doubledash && return
 
-	local subcommands="start bad good skip reset visualize replay log run"
+	local subcommands="start bad new good old terms skip reset visualize replay log run help"
 	local subcommand="$(__git_find_on_cmdline "$subcommands")"
 	if [ -z "$subcommand" ]; then
 		__git_find_repo_path
@@ -1462,7 +1462,20 @@ _git_bisect ()
 	fi
 
 	case "$subcommand" in
-	bad|good|reset|skip|start)
+	start)
+		case "$cur" in
+		--*)
+			__gitcomp "--term-new --term-bad --term-old --term-good --first-parent --no-checkout"
+			return
+			;;
+		*)
+			;;
+		esac
+		;;
+	esac
+
+	case "$subcommand" in
+	bad|new|good|old|reset|skip|start)
 		__git_complete_refs
 		;;
 	*)
