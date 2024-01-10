@@ -1591,13 +1591,22 @@ _git_bisect ()
 		term_good=`__git bisect terms --term-good`
 	fi
 
-	local subcommands="start bad new $term_bad good old $term_good terms skip reset visualize replay log run help"
+	# We will complete any custom terms, but still always complete the
+	# more usual bad/new/good/old because git bisect gives a good error
+	# message if these are given when not in use and that's better than
+	# silent refusal to complete if the user is confused.
+	#
+	# We want to recognize 'view' but not complete it, because it overlaps
+	# with 'visualize' too much and is just an alias for it.
+	#
+	local completable_subcommands="start bad new $term_bad good old $term_good terms skip reset visualize replay log run help"
+	local all_subcommands="$completable_subcommands view"
 
-	local subcommand="$(__git_find_on_cmdline "$subcommands")"
+	local subcommand="$(__git_find_on_cmdline "$all_subcommands")"
 
 	if [ -z "$subcommand" ]; then
 		if [ -f "$__git_repo_path"/BISECT_START ]; then
-			__gitcomp "$subcommands"
+			__gitcomp "$completable_subcommands"
 		else
 			__gitcomp "replay start"
 		fi
@@ -1615,7 +1624,7 @@ _git_bisect ()
 			;;
 		esac
 		;;
-	visualize)
+	visualize|view)
 		case "$cur" in
 		-*)
 			__git_complete_log_opts
