@@ -1445,6 +1445,140 @@ _git_archive ()
 	__git_complete_file
 }
 
+# Options that go well for log, shortlog and gitk
+__git_log_common_options="
+	--not --all
+	--branches --tags --remotes
+	--first-parent --merges --no-merges
+	--max-count=
+	--max-age= --since= --after=
+	--min-age= --until= --before=
+	--min-parents= --max-parents=
+	--no-min-parents --no-max-parents
+"
+# Options that go well for log and gitk (not shortlog)
+__git_log_gitk_options="
+	--dense --sparse --full-history
+	--simplify-merges --simplify-by-decoration
+	--left-right --notes --no-notes
+"
+# Options that go well for log and shortlog (not gitk)
+__git_log_shortlog_options="
+	--author= --committer= --grep=
+	--all-match --invert-grep
+"
+# Options accepted by log and show
+__git_log_show_options="
+	--diff-merges --diff-merges= --no-diff-merges --dd --remerge-diff
+"
+
+__git_diff_merges_opts="off none on first-parent 1 separate m combined c dense-combined cc remerge r"
+
+__git_log_pretty_formats="oneline short medium full fuller reference email raw format: tformat: mboxrd"
+__git_log_date_formats="relative iso8601 iso8601-strict rfc2822 short local default human raw unix auto: format:"
+
+# Check for only porcelain (i.e. not git-rev-list) option (not argument)
+# and selected option argument completions for git-log options and if any
+# are found put them in COMPREPLY.  COMPREPLY must be empty at the start,
+# and will be empty on return if no candidates are found.
+__git_complete_log_opts ()
+{
+	[ -z "$COMPREPLY" ] || return 1   # Precondition
+
+	local merge=""
+	if [ -f "$__git_repo_path/MERGE_HEAD" ]; then
+		merge="--merge"
+	fi
+	case "$prev,$cur" in
+	-L,:*:*)
+		return	# fall back to Bash filename completion
+		;;
+	-L,:*)
+		__git_complete_symbol --cur="${cur#:}" --sfx=":"
+		return
+		;;
+	-G,*|-S,*)
+		__git_complete_symbol
+		return
+		;;
+	esac
+	case "$cur" in
+	--pretty=*|--format=*)
+		__gitcomp "$__git_log_pretty_formats $(__git_pretty_aliases)
+			" "" "${cur#*=}"
+		return
+		;;
+	--date=*)
+		__gitcomp "$__git_log_date_formats" "" "${cur##--date=}"
+		return
+		;;
+	--decorate=*)
+		__gitcomp "full short no" "" "${cur##--decorate=}"
+		return
+		;;
+	--diff-algorithm=*)
+		__gitcomp "$__git_diff_algorithms" "" "${cur##--diff-algorithm=}"
+		return
+		;;
+	--submodule=*)
+		__gitcomp "$__git_diff_submodule_formats" "" "${cur##--submodule=}"
+		return
+		;;
+	--ws-error-highlight=*)
+		__gitcomp "$__git_ws_error_highlight_opts" "" "${cur##--ws-error-highlight=}"
+		return
+		;;
+	--no-walk=*)
+		__gitcomp "sorted unsorted" "" "${cur##--no-walk=}"
+		return
+		;;
+	--diff-merges=*)
+                __gitcomp "$__git_diff_merges_opts" "" "${cur##--diff-merges=}"
+                return
+                ;;
+	--*)
+		__gitcomp "
+			$__git_log_common_options
+			$__git_log_shortlog_options
+			$__git_log_gitk_options
+			$__git_log_show_options
+			--root --topo-order --date-order --reverse
+			--follow --full-diff
+			--abbrev-commit --no-abbrev-commit --abbrev=
+			--relative-date --date=
+			--pretty= --format= --oneline
+			--show-signature
+			--cherry-mark
+			--cherry-pick
+			--graph
+			--decorate --decorate= --no-decorate
+			--walk-reflogs
+			--no-walk --no-walk= --do-walk
+			--parents --children
+			--expand-tabs --expand-tabs= --no-expand-tabs
+			$merge
+			$__git_diff_common_options
+			"
+		return
+		;;
+	-L:*:*)
+		return	# fall back to Bash filename completion
+		;;
+	-L:*)
+		__git_complete_symbol --cur="${cur#-L:}" --sfx=":"
+		return
+		;;
+	-G*)
+		__git_complete_symbol --pfx="-G" --cur="${cur#-G}"
+		return
+		;;
+	-S*)
+		__git_complete_symbol --pfx="-S" --cur="${cur#-S}"
+		return
+		;;
+	esac
+}
+
 _git_bisect ()
 {
 	__git_has_doubledash && return
@@ -2050,141 +2184,6 @@ _git_ls_tree ()
 	esac
 
 	__git_complete_file
-}
-
-# Options that go well for log, shortlog and gitk
-__git_log_common_options="
-	--not --all
-	--branches --tags --remotes
-	--first-parent --merges --no-merges
-	--max-count=
-	--max-age= --since= --after=
-	--min-age= --until= --before=
-	--min-parents= --max-parents=
-	--no-min-parents --no-max-parents
-"
-# Options that go well for log and gitk (not shortlog)
-__git_log_gitk_options="
-	--dense --sparse --full-history
-	--simplify-merges --simplify-by-decoration
-	--left-right --notes --no-notes
-"
-# Options that go well for log and shortlog (not gitk)
-__git_log_shortlog_options="
-	--author= --committer= --grep=
-	--all-match --invert-grep
-"
-# Options accepted by log and show
-__git_log_show_options="
-	--diff-merges --diff-merges= --no-diff-merges --dd --remerge-diff
-"
-
-__git_diff_merges_opts="off none on first-parent 1 separate m combined c dense-combined cc remerge r"
-
-__git_log_pretty_formats="oneline short medium full fuller reference email raw format: tformat: mboxrd"
-__git_log_date_formats="relative iso8601 iso8601-strict rfc2822 short local default human raw unix auto: format:"
-
-
-# Check for only porcelain (i.e. not git-rev-list) option (not argument)
-# and selected option argument completions for git-log options and if any
-# are found put them in COMPREPLY.  COMPREPLY must be empty at the start,
-# and will be empty on return if no candidates are found.
-__git_complete_log_opts ()
-{
-	[ -z "$COMPREPLY" ] || return 1   # Precondition
-
-	local merge=""
-	if [ -f "$__git_repo_path/MERGE_HEAD" ]; then
-		merge="--merge"
-	fi
-	case "$prev,$cur" in
-	-L,:*:*)
-		return	# fall back to Bash filename completion
-		;;
-	-L,:*)
-		__git_complete_symbol --cur="${cur#:}" --sfx=":"
-		return
-		;;
-	-G,*|-S,*)
-		__git_complete_symbol
-		return
-		;;
-	esac
-	case "$cur" in
-	--pretty=*|--format=*)
-		__gitcomp "$__git_log_pretty_formats $(__git_pretty_aliases)
-			" "" "${cur#*=}"
-		return
-		;;
-	--date=*)
-		__gitcomp "$__git_log_date_formats" "" "${cur##--date=}"
-		return
-		;;
-	--decorate=*)
-		__gitcomp "full short no" "" "${cur##--decorate=}"
-		return
-		;;
-	--diff-algorithm=*)
-		__gitcomp "$__git_diff_algorithms" "" "${cur##--diff-algorithm=}"
-		return
-		;;
-	--submodule=*)
-		__gitcomp "$__git_diff_submodule_formats" "" "${cur##--submodule=}"
-		return
-		;;
-	--ws-error-highlight=*)
-		__gitcomp "$__git_ws_error_highlight_opts" "" "${cur##--ws-error-highlight=}"
-		return
-		;;
-	--no-walk=*)
-		__gitcomp "sorted unsorted" "" "${cur##--no-walk=}"
-		return
-		;;
-	--diff-merges=*)
-                __gitcomp "$__git_diff_merges_opts" "" "${cur##--diff-merges=}"
-                return
-                ;;
-	--*)
-		__gitcomp "
-			$__git_log_common_options
-			$__git_log_shortlog_options
-			$__git_log_gitk_options
-			$__git_log_show_options
-			--root --topo-order --date-order --reverse
-			--follow --full-diff
-			--abbrev-commit --no-abbrev-commit --abbrev=
-			--relative-date --date=
-			--pretty= --format= --oneline
-			--show-signature
-			--cherry-mark
-			--cherry-pick
-			--graph
-			--decorate --decorate= --no-decorate
-			--walk-reflogs
-			--no-walk --no-walk= --do-walk
-			--parents --children
-			--expand-tabs --expand-tabs= --no-expand-tabs
-			$merge
-			$__git_diff_common_options
-			"
-		return
-		;;
-	-L:*:*)
-		return	# fall back to Bash filename completion
-		;;
-	-L:*)
-		__git_complete_symbol --cur="${cur#-L:}" --sfx=":"
-		return
-		;;
-	-G*)
-		__git_complete_symbol --pfx="-G" --cur="${cur#-G}"
-		return
-		;;
-	-S*)
-		__git_complete_symbol --pfx="-S" --cur="${cur#-S}"
-		return
-		;;
-	esac
 }
 
 _git_log ()
