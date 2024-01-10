@@ -1583,10 +1583,19 @@ _git_bisect ()
 {
 	__git_has_doubledash && return
 
-	local subcommands="start bad new good old terms skip reset visualize replay log run help"
+	__git_find_repo_path
+
+	local term_bad term_good
+	if [ -f "$__git_repo_path"/BISECT_START ]; then
+		term_bad=`__git bisect terms --term-bad`
+		term_good=`__git bisect terms --term-good`
+	fi
+
+	local subcommands="start bad new $term_bad good old $term_good terms skip reset visualize replay log run help"
+
 	local subcommand="$(__git_find_on_cmdline "$subcommands")"
+
 	if [ -z "$subcommand" ]; then
-		__git_find_repo_path
 		if [ -f "$__git_repo_path"/BISECT_START ]; then
 			__gitcomp "$subcommands"
 		else
@@ -1619,7 +1628,7 @@ _git_bisect ()
 	esac
 
 	case "$subcommand" in
-	bad|new|good|old|reset|skip|start)
+	bad|new|"$term_bad"|good|old|"$term_good"|reset|skip|start)
 		__git_complete_refs
 		;;
 	*)
