@@ -28,7 +28,12 @@ test_expect_success 'setup' '
 '
 
 test_expect_success 'gitdir selection on normal repos' '
-	test_oid version >expect &&
+	if test_have_prereq DEFAULT_REPO_FORMAT
+	then
+		echo 0
+	else
+		echo 1
+	fi >expect &&
 	git config core.repositoryformatversion >actual &&
 	git -C test config core.repositoryformatversion >actual2 &&
 	test_cmp expect actual &&
@@ -79,8 +84,13 @@ mkconfig () {
 
 while read outcome version extensions; do
 	test_expect_success "$outcome version=$version $extensions" "
-		mkconfig $version $extensions >.git/config &&
-		check_${outcome}
+		test_when_finished 'rm -rf extensions' &&
+		git init extensions &&
+		(
+			cd extensions &&
+			mkconfig $version $extensions >.git/config &&
+			check_${outcome}
+		)
 	"
 done <<\EOF
 allow 0
@@ -94,7 +104,8 @@ allow 1 noop-v1
 EOF
 
 test_expect_success 'precious-objects allowed' '
-	mkconfig 1 preciousObjects >.git/config &&
+	git config core.repositoryFormatVersion 1 &&
+	git config extensions.preciousObjects 1 &&
 	check_allow
 '
 
