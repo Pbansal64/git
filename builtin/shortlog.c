@@ -172,7 +172,7 @@ static void insert_records_from_trailers(struct shortlog *log,
 					 const char *oneline)
 {
 	struct trailer_iterator iter;
-	const char *commit_buffer, *body;
+	const char *commit_buffer, *body, *value;
 	struct strbuf ident = STRBUF_INIT;
 
 	if (!log->trailers.nr)
@@ -190,7 +190,10 @@ static void insert_records_from_trailers(struct shortlog *log,
 
 	trailer_iterator_init(&iter, body);
 	while (trailer_iterator_advance(&iter)) {
-		const char *value = iter.val.buf;
+		if (!iter.is_trailer)
+			continue;
+
+		value = iter.val.buf;
 
 		if (!string_list_has_string(&log->trailers, iter.key.buf))
 			continue;
