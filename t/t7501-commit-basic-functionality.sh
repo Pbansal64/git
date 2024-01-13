@@ -3,8 +3,7 @@
 # Copyright (c) 2007 Kristian Høgsberg <krh@redhat.com>
 #
 
-# FIXME: Test the various index usages, -i and -o, test reflog,
-# signoff
+# FIXME: Test the various index usages, test reflog
 
 test_description='git commit'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
@@ -92,6 +91,19 @@ test_expect_success '--long fails with nothing to commit' '
 	test_must_fail git commit -m initial --long
 '
 
+test_expect_success 'fail to commit untracked file' '
+	echo content >baz &&
+	test_must_fail git commit -m "baz" baz
+'
+
+test_expect_success '--only also fail to commit untracked file' '
+	test_must_fail git commit --only -m "baz" baz
+'
+
+test_expect_success '--include also fail to commit untracked file' '
+	test_must_fail git commit --include -m "baz" baz
+'
+
 test_expect_success 'setup: non-initial commit' '
 	echo bongo bongo bongo >file &&
 	git commit -m next -a
@@ -115,6 +127,70 @@ test_expect_success '--porcelain with stuff to commit returns ok' '
 test_expect_success '--long with stuff to commit returns ok' '
 	echo bongo bongo bongo >>file &&
 	git commit -m next -a --long
+'
+
+test_expect_success 'only commit given path (also excluding additional staged changes)' '
+	echo content >file &&
+	echo content >baz &&
+	git add baz &&
+	git commit -m "file" file &&
+
+	git diff --name-only >actual &&
+	test_must_be_empty actual &&
+
+	git diff --name-only --staged >actual &&
+	test_cmp - actual <<-EOF &&
+	baz
+	EOF
+
+	git diff --name-only HEAD^ HEAD >actual &&
+	test_cmp - actual <<-EOF
+	file
+	EOF
+'
+
+test_expect_success 'same as above with -o/--only' '
+	echo change >file &&
+	echo change >baz &&
+	git add baz &&
+	git commit --only -m "file" file &&
+
+	git diff --name-only >actual &&
+	test_must_be_empty actual &&
+
+	git diff --name-only --staged >actual &&
+	test_cmp - actual <<-EOF &&
+	baz
+	EOF
+
+	git diff --name-only HEAD^ HEAD >actual &&
+	test_cmp - actual <<-EOF
+	file
+	EOF
+'
+
+test_expect_success '-i/--include includes staged changes' '
+	echo newcontent >file &&
+	echo newcontent >baz &&
+	git add file &&
+	git commit --include -m "file baz" baz  &&
+
+	git diff --name-only HEAD >remaining &&
+	test_must_be_empty remaining &&
+
+	git diff --name-only HEAD^ HEAD >changes &&
+	test_cmp - changes <<-EOF
+	baz
+	file
+	EOF
+'
+
+test_expect_success '--include and --only do not mix' '
+	test_when_finished "git reset --hard" &&
+	echo new >file &&
+	echo new >baz &&
+	test_must_fail git commit --include --only -m "file baz" file baz 2>actual &&
+	test_grep -e "fatal: options .-i/--include. and .-o/--only. cannot be used together" actual
 '
 
 test_expect_success 'commit message from non-existing file' '
@@ -387,6 +463,28 @@ test_expect_success 'amend commit to fix date' '
 	git cat-file -p HEAD >current &&
 	test_cmp expected current
 
+'
+
+test_expect_success 'amend commit to add signoff' '
+
+	test_commit "msg" file content &&
+	git commit --amend --signoff &&
+	test_commit_message HEAD <<-EOF
+	msg
+
+	Signed-off-by: $GIT_COMMITTER_NAME <$GIT_COMMITTER_EMAIL>
+	EOF
+'
+
+test_expect_success 'amend does not add signoff if it already exists' '
+
+	test_commit --signoff "tenor" file newcontent &&
+	git commit --amend --signoff &&
+	test_commit_message HEAD <<-EOF
+	tenor
+
+	Signed-off-by: $GIT_COMMITTER_NAME <$GIT_COMMITTER_EMAIL>
+	EOF
 '
 
 test_expect_success 'commit mentions forced date in output' '
