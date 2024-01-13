@@ -175,6 +175,7 @@ void reftable_stack_destroy(struct reftable_stack *st)
 		st->readers_len = 0;
 		FREE_AND_NULL(st->readers);
 	}
+	stat_validity_clear(&st->list_validity);
 	FREE_AND_NULL(st->list_file);
 	FREE_AND_NULL(st->reftable_dir);
 	reftable_free(st);
@@ -304,69 +305,86 @@ static int tv_cmp(struct timeval *a, struct timeval *b)
 static int reftable_stack_reload_maybe_reuse(struct reftable_stack *st,
 					     int reuse_open)
 {
-	struct timeval deadline = { 0 };
-	int err = gettimeofday(&deadline, NULL);
+	char **names = NULL, **names_after = NULL;
+	struct timeval deadline;
 	int64_t delay = 0;
-	int tries = 0;
+	int tries = 0, err;
+	int fd = -1;
+
+	err = gettimeofday(&deadline, NULL);
 	if (err < 0)
-		return err;
-
+		goto out;
 	deadline.tv_sec += 3;
+
 	while (1) {
-		char **names = NULL;
-		char **names_after = NULL;
-		struct timeval now = { 0 };
-		int err = gettimeofday(&now, NULL);
-		int err2 = 0;
-		if (err < 0) {
-			return err;
-		}
+		struct timeval now;
 
-		/* Only look at deadlines after the first few times. This
-		   simplifies debugging in GDB */
+		err = gettimeofday(&now, NULL);
+		if (err < 0)
+			goto out;
+
+		/*
+		 * Only look at deadlines after the first few times. This
+		 * simplifies debugging in GDB.
+		 */
 		tries++;
-		if (tries > 3 && tv_cmp(&now, &deadline) >= 0) {
-			break;
+		if (tries > 3 && tv_cmp(&now, &deadline) >= 0)
+			goto out;
+
+		fd = open(st->list_file, O_RDONLY);
+		if (fd < 0) {
+			if (errno != ENOENT) {
+				err = REFTABLE_IO_ERROR;
+				goto out;
+			}
+
+			names = reftable_calloc(sizeof(char *));
+		} else {
+			err = fd_read_lines(fd, &names);
+			if (err < 0)
+				goto out;
 		}
 
-		err = read_lines(st->list_file, &names);
-		if (err < 0) {
-			free_names(names);
-			return err;
-		}
 		err = reftable_stack_reload_once(st, names, reuse_open);
-		if (err == 0) {
-			free_names(names);
+		if (!err)
 			break;
-		}
-		if (err != REFTABLE_NOT_EXIST_ERROR) {
-			free_names(names);
-			return err;
-		}
+		if (err != REFTABLE_NOT_EXIST_ERROR)
+			goto out;
 
-		/* err == REFTABLE_NOT_EXIST_ERROR can be caused by a concurrent
-		   writer. Check if there was one by checking if the name list
-		   changed.
-		*/
-		err2 = read_lines(st->list_file, &names_after);
-		if (err2 < 0) {
-			free_names(names);
-			return err2;
-		}
-
+		/*
+		 * REFTABLE_NOT_EXIST_ERROR can be caused by a concurrent
+		 * writer. Check if there was one by checking if the name list
+		 * changed.
+		 */
+		err = read_lines(st->list_file, &names_after);
+		if (err < 0)
+			goto out;
 		if (names_equal(names_after, names)) {
-			free_names(names);
-			free_names(names_after);
-			return err;
+			err = REFTABLE_NOT_EXIST_ERROR;
+			goto out;
 		}
+
 		free_names(names);
+		names = NULL;
 		free_names(names_after);
+		names_after = NULL;
+		close(fd);
+		fd = -1;
 
 		delay = delay + (delay * rand()) / RAND_MAX + 1;
 		sleep_millisec(delay);
 	}
 
-	return 0;
+	stat_validity_update(&st->list_validity, fd);
+
+out:
+	if (err)
+		stat_validity_clear(&st->list_validity);
+	if (fd >= 0)
+		close(fd);
+	free_names(names);
+	free_names(names_after);
+	return err;
 }
 
 /* -1 = error
@@ -375,8 +393,13 @@ static int reftable_stack_reload_maybe_reuse(struct reftable_stack *st,
 static int stack_uptodate(struct reftable_stack *st)
 {
 	char **names = NULL;
-	int err = read_lines(st->list_file, &names);
+	int err;
 	int i = 0;
+
+	if (stat_validity_check(&st->list_validity, st->list_file))
+		return 0;
+
+	err = read_lines(st->list_file, &names);
 	if (err < 0)
 		return err;
 
