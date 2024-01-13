@@ -30,4 +30,12 @@ test_expect_success 'advice should not be printed when config variable is set to
 	test_must_be_empty actual
 '
 
+test_expect_success 'advice without the instructions to disable it' '
+	cat >expect <<-\EOF &&
+	hint: This is a piece of advice
+	EOF
+	test-tool -c advice.adviceOff=0 advise "This is a piece of advice" 2>actual &&
+	test_cmp expect actual
+'
+
 test_done
