@@ -298,48 +298,6 @@ static int graph_read_oid_fanout(const unsigned char *chunk_start,
 	return 0;
 }
 
-static int graph_read_oid_lookup(const unsigned char *chunk_start,
-				 size_t chunk_size, void *data)
-{
-	struct commit_graph *g = data;
-	g->chunk_oid_lookup = chunk_start;
-	if (chunk_size / g->hash_len != g->num_commits)
-		return error(_("commit-graph OID lookup chunk is the wrong size"));
-	return 0;
-}
-
-static int graph_read_commit_data(const unsigned char *chunk_start,
-				  size_t chunk_size, void *data)
-{
-	struct commit_graph *g = data;
-	if (chunk_size / GRAPH_DATA_WIDTH != g->num_commits)
-		return error(_("commit-graph commit data chunk is wrong size"));
-	g->chunk_commit_data = chunk_start;
-	return 0;
-}
-
-static int graph_read_generation_data(const unsigned char *chunk_start,
-				      size_t chunk_size, void *data)
-{
-	struct commit_graph *g = data;
-	if (chunk_size / sizeof(uint32_t) != g->num_commits)
-		return error(_("commit-graph generations chunk is wrong size"));
-	g->chunk_generation_data = chunk_start;
-	return 0;
-}
-
-static int graph_read_bloom_index(const unsigned char *chunk_start,
-				  size_t chunk_size, void *data)
-{
-	struct commit_graph *g = data;
-	if (chunk_size / 4 != g->num_commits) {
-		warning(_("commit-graph changed-path index chunk is too small"));
-		return -1;
-	}
-	g->chunk_bloom_indexes = chunk_start;
-	return 0;
-}
-
 static int graph_read_bloom_data(const unsigned char *chunk_start,
 				  size_t chunk_size, void *data)
 {
@@ -434,12 +392,15 @@ struct commit_graph *parse_commit_graph(struct repo_settings *s,
 		error(_("commit-graph required OID fanout chunk missing or corrupted"));
 		goto free_and_return;
 	}
-	if (read_chunk(cf, GRAPH_CHUNKID_OIDLOOKUP, graph_read_oid_lookup, graph)) {
-		error(_("commit-graph required OID lookup chunk missing or corrupted"));
+	if (pair_chunk_expect(cf, GRAPH_CHUNKID_OIDLOOKUP,
+			      &graph->chunk_oid_lookup, graph->hash_len,
+			      graph->num_commits)) {
+		error(_("commit-graph OID lookup chunk is the wrong size"));
 		goto free_and_return;
 	}
-	if (read_chunk(cf, GRAPH_CHUNKID_DATA, graph_read_commit_data, graph)) {
-		error(_("commit-graph required commit data chunk missing or corrupted"));
+	if (pair_chunk_expect(cf, GRAPH_CHUNKID_DATA, &graph->chunk_commit_data,
+			      GRAPH_DATA_WIDTH, graph->num_commits)) {
+		error(_("commit-graph commit data chunk is wrong size"));
 		goto free_and_return;
 	}
 
@@ -449,8 +410,11 @@ struct commit_graph *parse_commit_graph(struct repo_settings *s,
 		   &graph->chunk_base_graphs_size);
 
 	if (s->commit_graph_generation_version >= 2) {
-		read_chunk(cf, GRAPH_CHUNKID_GENERATION_DATA,
-			   graph_read_generation_data, graph);
+		if (pair_chunk_expect(cf, GRAPH_CHUNKID_GENERATION_DATA,
+				      &graph->chunk_generation_data,
+				      sizeof(uint32_t),
+				      graph->num_commits))
+			error(_("commit-graph generations chunk is wrong size"));
 		pair_chunk(cf, GRAPH_CHUNKID_GENERATION_DATA_OVERFLOW,
 			   &graph->chunk_generation_data_overflow,
 			   &graph->chunk_generation_data_overflow_size);
@@ -460,8 +424,11 @@ struct commit_graph *parse_commit_graph(struct repo_settings *s,
 	}
 
 	if (s->commit_graph_read_changed_paths) {
-		read_chunk(cf, GRAPH_CHUNKID_BLOOMINDEXES,
-			   graph_read_bloom_index, graph);
+		int res = pair_chunk_expect(cf, GRAPH_CHUNKID_BLOOMINDEXES,
+				      &graph->chunk_bloom_indexes,
+				      sizeof(uint32_t), graph->num_commits);
+		if (res && res != CHUNK_NOT_FOUND)
+			warning(_("commit-graph changed-path index chunk is too small"));
 		read_chunk(cf, GRAPH_CHUNKID_BLOOMDATA,
 			   graph_read_bloom_data, graph);
 	}

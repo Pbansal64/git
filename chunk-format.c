@@ -163,6 +163,10 @@ int read_table_of_contents(struct chunkfile *cf,
 struct pair_chunk_data {
 	const unsigned char **p;
 	size_t *size;
+
+	/* for pair_chunk_expect() only */
+	size_t record_size;
+	size_t record_nr;
 };
 
 static int pair_chunk_fn(const unsigned char *chunk_start,
@@ -175,6 +179,17 @@ static int pair_chunk_fn(const unsigned char *chunk_start,
 	return 0;
 }
 
+static int pair_chunk_expect_fn(const unsigned char *chunk_start,
+				size_t chunk_size,
+				void *data)
+{
+	struct pair_chunk_data *pcd = data;
+	if (chunk_size / pcd->record_size != pcd->record_nr)
+		return -1;
+	*pcd->p = chunk_start;
+	return 0;
+}
+
 int pair_chunk(struct chunkfile *cf,
 	       uint32_t chunk_id,
 	       const unsigned char **p,
@@ -182,6 +197,20 @@ int pair_chunk(struct chunkfile *cf,
 {
 	struct pair_chunk_data pcd = { .p = p, .size = size };
 	return read_chunk(cf, chunk_id, pair_chunk_fn, &pcd);
+}
+
+int pair_chunk_expect(struct chunkfile *cf,
+		      uint32_t chunk_id,
+		      const unsigned char **p,
+		      size_t record_size,
+		      size_t record_nr)
+{
+	struct pair_chunk_data pcd = {
+		.p = p,
+		.record_size = record_size,
+		.record_nr = record_nr,
+	};
+	return read_chunk(cf, chunk_id, pair_chunk_expect_fn, &pcd);
 }
 
 int read_chunk(struct chunkfile *cf,
